@@ -7,7 +7,6 @@ The firmware is built using modern C++17 wrapped around Zephyr RTOS C APIs, spec
     *   **Zephyr/NCS (Recommended):** Provides out-of-the-box integration with the nRF54L15's low-power states, a robust, certified open-source BLE stack, DeviceTree for hardware abstraction, and MCUBoot for OTA updates.
     *   **Bare-Metal (Super-loop):** While offering ultimate control and minimal footprint, bare-metal is highly unsuited for complex, multi-state BLE connectivity and OTA updates. Managing asynchronous radio events alongside sensor processing would lead to fragile, unmaintainable code.
     *   **Lightweight RTOS (e.g., FreeRTOS):** A viable alternative, but it requires significantly more manual effort to integrate Nordic's SoftDevice/BLE controller and tune power management compared to Zephyr's native ecosystem.
-*   **Why C++?** Strong typing, RAII for hardware locks (mutexes), and interfaces (pure virtual classes) make unit testing hardware-dependent logic much easier via mocking. Dynamic allocation (`new`/`malloc`) is strictly forbidden after initialization.
 
 ## Major Firmware Modules
 The system is logically partitioned to enforce separation of concerns:
