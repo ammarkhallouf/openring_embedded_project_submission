@@ -1,31 +1,35 @@
 #include "SensorManager.hpp"
-
 // Push IMU sample (simulating 50Hz incoming ISR/Timer data)
-void SensorManager::pushImuSample(const ImuData& data) {
-    imuBuffer.push(data);
+void SensorManager::pushImuSample(const ImuSample& sample)
+{
+    imu_buffer_.push(sample);
 }
 
 // Push Temp sample (simulating 1Hz incoming Timer data)
-void SensorManager::pushTemperatureSample(const TempData& data) {
-    tempBuffer.push(data);
+void SensorManager::pushTemperatureSample(const TemperatureSample& sample)
+{
+    temperature_buffer_.push(sample);
 }
-
 // Retrieve IMU snapshot for BLE subsystem
-std::vector<ImuData> SensorManager::getImuSnapshot() {
-    return imuBuffer.getSnapshot();
+std::vector<ImuSample> SensorManager::getImuSnapshot()
+{
+    return imu_buffer_.snapshotAndClear();
 }
 
 // Retrieve Temp snapshot for BLE subsystem
-std::vector<TempData> SensorManager::getTemperatureSnapshot() {
-    return tempBuffer.getSnapshot();
+std::vector<TemperatureSample> SensorManager::getTemperatureSnapshot()
+{
+    return temperature_buffer_.snapshotAndClear();
 }
 
 // Fetch IMU overflow count
-size_t SensorManager::imuOverflowCount() const {
-    return imuBuffer.getOverflowCount();
+std::size_t SensorManager::imuOverflowCount() const
+{
+    return imu_buffer_.overflowCount();
 }
 
 // Fetch Temp overflow count
-size_t SensorManager::temperatureOverflowCount() const {
-    return tempBuffer.getOverflowCount();
+std::size_t SensorManager::temperatureOverflowCount() const
+{
+    return temperature_buffer_.overflowCount();
 }

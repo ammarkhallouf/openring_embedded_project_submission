@@ -28,19 +28,50 @@ Software bugs often hide in power signatures (e.g., an unreleased mutex preventi
 *   **Tools**: Oscilloscope (high BW), Spectrum Analyzer, Nordic PPK2, Saleae Logic Analyzer.
 *   **Design Changes**:
     *   **Firmware**: Implement an "Anticipatory Power" scheme to mute PPG sampling during heavy BLE transmissions, or utilize DMA for sensor data transfer to remove CPU jitter.
-    *   **Hardware**: Add ferrite beads on the PPG power rail and increase decoupling capacitor density. Add a dedicated LDO for the PPG AFE to improve PSRR (Power Supply Rejection Ratio).
+    *   **Hardware**: Evaluate ferrite beads, local LDO, improved decoupling, and layout isolation if measurements show conducted or radiated coupling.
 
 ## Issue B: Battery life is approximately 40% lower than expected
 *   **Likely Root Causes**:
-    1.  **Zombie States**: Firmware is not entering true `System OFF` or `System ON` (with RAM retention) sleep due to floating GPIOs or unreleased mutexes.
-    2.  **Clocking**: The 32.768kHz crystal is failing to start, forcing the MCU to keep the high-speed RC oscillator running.
-    3.  **Peripheral Leakage**: Sensors or motors are not being fully power-gated during sleep.
-*   **Evidence to Collect**: 24-hour power profile capture, "Deep Sleep" baseline current measurement, and GPIO state logs.
-*   **Debugging Process**: Measure baseline current with all peripherals disconnected (verify MCU floor). Use a `power_log` thread that periodically prints state machine status. Use the PPK2 to identify which subsystem prevents the "floor" current from reaching the < 5µA target.
-*   **Tools**: PPK2, Joulescope, Multimeter with µA resolution.
+
+    1. **Incorrect current model:** The theoretical estimate may use datasheet typical currents rather than measured currents under real BLE, sensor, and temperature conditions.
+    2. **Poor sleep residency:** The MCU may be waking too often due to timers, logging, sensor polling, BLE events, or misconfigured interrupts.
+    3. **Peripheral leakage:** Sensors, pull-ups, level shifters, load switches, debug circuits, or GPIOs may leak in sleep.
+    4. **BLE connection behavior:** Connection interval, slave latency, MTU, retransmissions, or mobile OS behavior may keep the radio active longer than expected.
+    5. **PPG LED current and duty cycle:** Optical settings may be more expensive than assumed, especially if motion compensation increases LED current or sample averaging.
+    6. **Battery capacity mismatch:** Usable capacity may be lower due to ESR, cutoff voltage, charge termination, temperature, aging, or supplier variation.
+
+*   **Evidence to Collect**:
+    - Average and peak current by state: shipping, idle, advertising, connected idle, active streaming, sleep tracking, haptic event, charging.
+    - Sleep residency percentage from firmware trace.
+    - BLE connection interval, latency, retransmission rate, RSSI, and notification throughput.
+    - Sensor enable/disable timing and current deltas.
+    - Battery discharge curve under representative loads.
+    - GPIO states and leakage paths in sleep.
+
+*   **Debugging Process**:
+    1. Reproduce the issue with a fixed firmware build, known battery, and controlled test profile.
+    2. Measure current using a Nordic PPK2 or Joulescope across each operating state.
+    3. Compare measured state currents and dwell times against the original power model.
+    4. Disable subsystems one at a time: BLE, PPG, IMU, temperature, touch, haptics, logging.
+    5. Verify sleep entry using GPIO trace pins, RTOS power-management logs, and current waveform inspection.
+    6. Check whether BLE connection parameters negotiated by the phone match firmware expectations.
+    7. Validate battery capacity independently with a controlled discharge test.
+
+*   **Tools**:
+    - Nordic PPK2 or Joulescope
+    - Oscilloscope for wake/event correlation
+    - BLE sniffer
+    - Firmware trace logging / SEGGER SystemView
+    - Bench supply with current logging
+
 *   **Design Changes**:
-    *   **Firmware**: Enforce strict `configureForDeepSleep()` routines that force all unused GPIOs into known states (Hi-Z or pull-up/down) to eliminate leakage.
-    *   **Hardware**: Verify that sensor load switches are correctly disconnecting power rails when commanded.
+    - Add automated power regression tests for each firmware release.
+    - Add explicit power states and entry/exit assertions.
+    - Batch sensor reads using FIFO watermarks instead of frequent polling.
+    - Use adaptive BLE parameters and batch uploads.
+    - Power-gate sensors that are not needed in each mode.
+    - Configure unused GPIOs to known low-leakage states.
+    - Add production test coverage for sleep current and sensor rail leakage.
 
 ## Issue C: 12% first-pass test failure rate
 *   **Likely Root Causes**:

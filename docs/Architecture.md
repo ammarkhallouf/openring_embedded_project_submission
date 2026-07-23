@@ -65,6 +65,9 @@ To achieve the targets for multi-day battery life, the system relies on a strict
 ### Battery Life Trade-Offs: 24-Hour vs. 1-Week Operation
 Balancing the platform between active real-time data output and set-and-forget longevity requires two fundamentally different operating models.
 
+The 24-hour target is mainly a research/development mode. The 1-week target requires aggressive duty cycling, long BLE intervals, low-leakage hardware states, and avoiding continuous PPG/radio activity.
+
+
 | Feature | 24-Hour Active Streaming Mode | 1-Week Duty-Cycled Background Mode |
 | :--- | :--- | :--- |
 | **Sensor Sampling Rates** | IMU: 50Hz (Continuous)<br>PPG: 25Hz+ (Continuous) | IMU: 12.5Hz (Wake-on-Motion)<br>PPG: Duty-cycled (e.g., 5s ON / 55s OFF) |
@@ -215,7 +218,7 @@ We utilize Zephyr's Simple Management Protocol (SMP) over BLE.
 1. **Sensors** fill hardware FIFOs autonomously.
 2. **Interrupt (GPIO)** wakes the nRF54L15.
 3. `SensorManager` schedules a Zephyr Work Queue item.
-4. MCU reads FIFO data via SPI/I2C using DMA (Zero-copy).
+4. Where supported by the selected peripheral and driver stack, use DMA/easyDMA-style transfers to reduce CPU wake time.
 5. Data is passed to `AlgorithmProcessing` (HR/Steps).
 6. Results are queued to `BLEManager` for transmission.
 7. MCU returns to sleep.
@@ -231,6 +234,14 @@ The system utilizes a modular driver interface. To add a new sensor:
 ## Assumptions, Risks, and Unknowns
 To effectively scope the architecture, several variables and edge cases must be addressed.
 
+| Topic | Assumption | Risk / Unknown | Mitigation |
+|---|---|---|---|
+| IMU | 6-axis IMU with FIFO and data-ready interrupt | Exact part, FIFO depth, current consumption unknown | Abstract driver API and validate timing/current during bring-up |
+| PPG | Integrated optical AFE with interrupt and configurable LED current | Optical/mechanical stack not specified | Prototype LED current, sampling rate, and motion rejection early |
+| Battery | Small rechargeable Li-ion/LiPo cell suitable for ring form factor | Capacity, ESR, charger IC, and fuel gauge unknown | Build power budget using measured currents and battery characterization |
+| BLE | Phone app supports notifications and control writes | MTU, connection interval, and background behavior vary by OS | Support adaptive connection parameters and packet versioning |
+| PCB | Compact rigid-flex or high-density board | RF, antenna detuning, thermal, and assembly yield risks | Add test points, RF keepouts, impedance control, and DFM review |
+
 ### Assumptions
 *   **Sensor Interfaces & FIFO/Interrupts:** The IMU and PPG communicate via a shared SPI or fast I2C bus to minimize MCU pin utilization. Crucially, I assume the selected sensors feature sufficiently deep internal hardware FIFOs and dedicated interrupt pins. This allows them to collect data autonomously while the nRF54L15 remains in deep sleep.
 *   **Battery Capacity & Charging:** I assume a standard ring form-factor battery capacity of roughly 15–20mAh. The system will rely on a dedicated PMIC (Power Management IC) for charging to enforce strict over-voltage and thermal limits.
@@ -238,7 +249,7 @@ To effectively scope the architecture, several variables and edge cases must be 
 *   **Hardware Ambiguity:** In the absence of specific schematics, layouts, or sensor part numbers, I am assuming the use of standard ultra-low-power wearable components (e.g., Bosch IMUs, Analog Devices AFEs) with standard digital interfaces.
 
 ### Risks & Unknowns
-*   **Sensor Selection (Risk):** If a sensor selected by the hardware team lacks an adequate FIFO buffer, the MCU will be forced to wake up at the sampling frequency (e.g., 50Hz for IMU). This would completely break the "Lazy MCU" power management strategy.
+*   **Sensor Selection (Risk):** If a sensor selected by the hardware team lacks an adequate FIFO buffer, the MCU will be forced to wake up at the sampling frequency (e.g., 50Hz for IMU). This would have a significant impact on the power management strategy.
 *   **Battery Swelling (Risk):** Drawing high peak currents (e.g., simultaneously running the vibrator motor and the BLE radio during a notification) can stress tiny pouch cells. This risks swelling, which could breach the waterproof sealing of the ring.
 *   **App Protocol Mismatches (Risk):** Parallel development of the app and firmware risks synchronization issues. If the app team expects raw streaming but the firmware defaults to edge-compute summaries, data pipelines will break.
 *   **RF Detuning (Unknown):** The human finger acts as a sink for RF energy. The precise layout of the BLE antenna and its real-world performance on a finger are unknown. If detuning is severe, the MCU will have to boost BLE transmit power, severely degrading battery life.
